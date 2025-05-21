@@ -1,0 +1,136 @@
+# .github/workflows/demo_workflow.yml
+name: Demo CI-Pipeline
+
+###############################################################################
+# 1. トリガー定義
+###############################################################################
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md']
+  pull_request:
+  workflow_dispatch:           # 手動起動
+  schedule:                    # 毎週月曜 03:00 (UTC)
+    - cron: '0 3 * * MON'
+
+###############################################################################
+# 2. ワークフロー共通設定
+###############################################################################
+concurrency:                   # ブランチごとに同時実行を 1 つに
+  group: demo-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+###############################################################################
+# 3. ジョブ定義
+###############################################################################
+jobs:
+  #--------------------------------------------------------------------------#
+  # 3-1. Lint ジョブ
+  #--------------------------------------------------------------------------#
+  lint:
+    name: 🔍 Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pretend Lint
+        run: echo "Lint OK!"
+
+  #--------------------------------------------------------------------------#
+  # 3-2. Unit Test（Python × 3 バージョンのマトリクス）
+  #--------------------------------------------------------------------------#
+  unit-test:
+    name: 🧪 Unit Test (Py ${{ matrix.py }})
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        py: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: ${{ matrix.py }}}
+
+      # ------- キャッシュ例（実際は空だけど雰囲気） -------
+      - name: Cache “deps”
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: deps-${{ runner.os }}-${{ matrix.py }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: deps-${{ runner.os }}-${{ matrix.py }}-
+
+      - name: Run fake tests
+        run: |
+          echo "::group::pytest"
+          echo "…ここで pytest が通る想定…"
+          echo "::endgroup::"
+
+      - name: Upload dummy coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov-${{ matrix.py }}
+          path: <(printf 'coverage: 100%%\n')   # 即席ファイル
+
+  #--------------------------------------------------------------------------#
+  # 3-3. Integration Test
+  #--------------------------------------------------------------------------#
+  integration-test:
+    name: 🌐 Integration Test
+    needs: unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Spin up mock service
+        run: echo "Start mock service"
+      - name: Run integration scenario
+        run: echo "All integrations green 🎉"
+
+  #--------------------------------------------------------------------------#
+  # 3-4. Docs Build（並列で実行）
+  #--------------------------------------------------------------------------#
+  docs-build:
+    name: 📚 Docs Build
+    needs: lint
+    runs-on: ubuntu-latest
+    environment: docs-preview          # “環境” のサンプル
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dummy docs
+        run: |
+          mkdir site
+          echo '<h1>Docs</h1>' > site/index.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+
+  #--------------------------------------------------------------------------#
+  # 3-5. Packaging
+  #--------------------------------------------------------------------------#
+  package:
+    name: 📦 Package
+    needs: [integration-test, docs-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create package file
+        run: |
+          mkdir out
+          echo "dummy binary" > out/app.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-package
+          path: out
+
+  #--------------------------------------------------------------------------#
+  # 3-6. Release（タグ push だけ実行、実際は何もしない）
+  #--------------------------------------------------------------------------#
+  release:
+    name: 🚀 Release (tag only)
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Announce
+        run: echo "🎉 Would create a GitHub Release here"
