@@ -7,16 +7,17 @@ name: Demo CI-Pipeline
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md']
+    paths-ignore:
+      - README.md
   pull_request:
-  workflow_dispatch:           # 手動起動
-  schedule:                    # 毎週月曜 03:00 (UTC)
-    - cron: '0 3 * * MON'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * MON'     # 毎週月曜 12:00 JST 相当
 
 ###############################################################################
-# 2. ワークフロー共通設定
+# 2. 共通設定
 ###############################################################################
-concurrency:                   # ブランチごとに同時実行を 1 つに
+concurrency:
   group: demo-${{ github.ref }}
   cancel-in-progress: true
 
@@ -29,10 +30,10 @@ defaults:
 ###############################################################################
 jobs:
   #--------------------------------------------------------------------------#
-  # 3-1. Lint ジョブ
+  # 3-1. Lint
   #--------------------------------------------------------------------------#
   lint:
-    name: 🔍 Lint
+    name: "🔍 Lint"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,10 +41,10 @@ jobs:
         run: echo "Lint OK!"
 
   #--------------------------------------------------------------------------#
-  # 3-2. Unit Test（Python × 3 バージョンのマトリクス）
+  # 3-2. Unit Test（Python 3.10〜3.12）
   #--------------------------------------------------------------------------#
   unit-test:
-    name: 🧪 Unit Test (Py ${{ matrix.py }})
+    name: "🧪 Unit Test (Py ${{ matrix.py }})"
     needs: lint
     runs-on: ubuntu-latest
     strategy:
@@ -51,16 +52,18 @@ jobs:
         py: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: ${{ matrix.py }}}
 
-      # ------- キャッシュ例（実際は空だけど雰囲気） -------
-      - name: Cache “deps”
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Cache deps
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: deps-${{ runner.os }}-${{ matrix.py }}-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: deps-${{ runner.os }}-${{ matrix.py }}-
+          restore-keys: |
+            deps-${{ runner.os }}-${{ matrix.py }}-
 
       - name: Run fake tests
         run: |
@@ -68,17 +71,20 @@ jobs:
           echo "…ここで pytest が通る想定…"
           echo "::endgroup::"
 
+      - name: Create dummy coverage
+        run: echo "coverage: 100%" > coverage.txt
+
       - name: Upload dummy coverage
         uses: actions/upload-artifact@v4
         with:
           name: cov-${{ matrix.py }}
-          path: <(printf 'coverage: 100%%\n')   # 即席ファイル
+          path: coverage.txt
 
   #--------------------------------------------------------------------------#
   # 3-3. Integration Test
   #--------------------------------------------------------------------------#
   integration-test:
-    name: 🌐 Integration Test
+    name: "🌐 Integration Test"
     needs: unit-test
     runs-on: ubuntu-latest
     steps:
@@ -88,13 +94,13 @@ jobs:
         run: echo "All integrations green 🎉"
 
   #--------------------------------------------------------------------------#
-  # 3-4. Docs Build（並列で実行）
+  # 3-4. Docs Build
   #--------------------------------------------------------------------------#
   docs-build:
-    name: 📚 Docs Build
+    name: "📚 Docs Build"
     needs: lint
     runs-on: ubuntu-latest
-    environment: docs-preview          # “環境” のサンプル
+    environment: docs-preview
     steps:
       - uses: actions/checkout@v4
       - name: Build dummy docs
@@ -107,10 +113,10 @@ jobs:
           path: site
 
   #--------------------------------------------------------------------------#
-  # 3-5. Packaging
+  # 3-5. Package
   #--------------------------------------------------------------------------#
   package:
-    name: 📦 Package
+    name: "📦 Package"
     needs: [integration-test, docs-build]
     runs-on: ubuntu-latest
     steps:
@@ -124,10 +130,10 @@ jobs:
           path: out
 
   #--------------------------------------------------------------------------#
-  # 3-6. Release（タグ push だけ実行、実際は何もしない）
+  # 3-6. Release（タグ push 時のみ）
   #--------------------------------------------------------------------------#
   release:
-    name: 🚀 Release (tag only)
+    name: "🚀 Release (tag only)"
     if: startsWith(github.ref, 'refs/tags/')
     needs: package
     runs-on: ubuntu-latest
