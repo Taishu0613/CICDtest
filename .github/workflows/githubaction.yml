@@ -72,7 +72,8 @@ jobs:
           echo "::endgroup::"
 
       - name: Create dummy coverage
-        run: echo "coverage: 100%" > coverage.txt
+        run: |
+          echo "coverage: 100%" > coverage.txt
 
       - name: Upload dummy coverage
         uses: actions/upload-artifact@v4
